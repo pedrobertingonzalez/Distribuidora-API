@@ -1,0 +1,16 @@
+[
+  {
+    "idCliente": 1,
+    "idProducto": 1,
+    "cantidad": 7
+  },
+  {
+    "idCliente": 2,
+    "idProducto": 1,
+    "cantidad": 7,
+    "estado": "completado",
+    "fecha": "13/5/2026",
+    "total": 3500,
+    "id": 1
+  }
+]

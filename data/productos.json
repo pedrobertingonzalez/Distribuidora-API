@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "nombre": "Arroz",
+    "precio": 500,
+    "stock": 100,
+    "idProveedor": 1
+  },
+  {
+    "id": 2,
+    "nombre": "Aceite",
+    "precio": 1200,
+    "stock": 50,
+    "idProveedor": 1
+  },
+  {
+    "id": 3,
+    "nombre": "Harina",
+    "precio": 400,
+    "stock": 8,
+    "idProveedor": 2
+  },
+  {
+    "nombre": "coleslow",
+    "precio": 600,
+    "stock": 53,
+    "idProveedor": 1,
+    "id": 4
+  }
+]

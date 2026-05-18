@@ -1,0 +1,9 @@
+[
+  {
+    "id": 1,
+    "nombre": "Distribuidora Norte",
+    "email": "norte@gmail.com",
+    "telefono": 1167890123,
+    "categoria": "alimentos"
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "id": 2,
+    "nombre": "Ana Martínez",
+    "email": "ana@gmail.com",
+    "telefono": 1156789012,
+    "direccion": "San Martín 567, Rosario"
+  },
+  {
+    "nombre": "Juan perez",
+    "email": "juan@gmail.com",
+    "telefono": 1145635901,
+    "direccion": "Av. Corrientes 13, Buenos Aires",
+    "id": 3
+  }
+]
