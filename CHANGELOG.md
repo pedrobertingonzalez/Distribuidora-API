@@ -9,6 +9,16 @@ ser leído sin tener que releer el código.
 
 ### Paso 1 — Base sólida (Fase 1)
 
+#### [GAP] Validación de input con joi — `middlewares/validate.js` + `schemas/`
+- Se instaló `joi` y se creó `middlewares/validate.js` con una factory `validate(schema)`.
+- La factory retorna un middleware que valida `req.body`, acumula todos los errores
+  (`abortEarly: false`), stripea campos desconocidos y castea tipos.
+- Se crearon schemas en `schemas/`: `clientes.schema.js`, `proveedores.schema.js`,
+  `productos.schema.js`, `pedidos.schema.js`.
+- Cada router POST usa `validate(schema)` antes del handler.
+- Los services mantienen sus validaciones de negocio (ej: stock suficiente) porque
+  eso es lógica de dominio, no validación de input.
+
 #### [GAP] Instancia axios configurada — `services/axiosClient.js`
 - `anthropicClient`: baseURL de Anthropic, timeout 30s, headers comunes pre-seteados.
 - `ollamaClient`: baseURL de Ollama local, timeout 60s (los modelos locales son más lentos).
