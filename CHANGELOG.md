@@ -9,6 +9,14 @@ ser leído sin tener que releer el código.
 
 ### Paso 1 — Base sólida (Fase 1)
 
+#### [GAP] Instancia axios configurada — `services/axiosClient.js`
+- `anthropicClient`: baseURL de Anthropic, timeout 30s, headers comunes pre-seteados.
+- `ollamaClient`: baseURL de Ollama local, timeout 60s (los modelos locales son más lentos).
+- Interceptor de request: inyecta `x-api-key` desde `process.env` en cada llamada a Anthropic.
+- Interceptor de response: loguea método, URL y tiempo de respuesta en ms.
+- `productos.services.js`, `agente.js` y `agenteLlama.js` migrados para usar estas instancias.
+- El timeout en Anthropic evita que una llamada colgada bloquee el servidor indefinidamente.
+
 #### [GAP] Clases de error custom — `middlewares/errors.js` + todos los services
 - Se creó `middlewares/errors.js` con `NotFoundError` (404) y `ValidationError` (400).
 - Ambas extienden `Error` y setean `this.status` en el constructor.
