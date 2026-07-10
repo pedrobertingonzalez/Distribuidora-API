@@ -9,6 +9,14 @@ ser leído sin tener que releer el código.
 
 ### Paso 1 — Base sólida (Fase 1)
 
+#### [GAP] Clases de error custom — `middlewares/errors.js` + todos los services
+- Se creó `middlewares/errors.js` con `NotFoundError` (404) y `ValidationError` (400).
+- Ambas extienden `Error` y setean `this.status` en el constructor.
+- `errorHandler.js` refactorizado para identificarlas con `instanceof` y loguear `err.name`.
+- Todos los services (`clientes`, `proveedores`, `productos`, `pedidos`) reemplazaron
+  el patrón manual `const e = new Error(); e.status = 400; throw e` por
+  `throw new ValidationError(...)` / `throw new NotFoundError(...)`.
+
 #### [GAP] process.on global — `index.js`
 - `unhandledRejection`: captura promesas rechazadas sin catch. Loguea y sale con código 1.
 - `uncaughtException`: captura errores sincrónicos que escaparon de todos los try/catch.

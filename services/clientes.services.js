@@ -1,79 +1,42 @@
-
-
-const fs = require ('fs').promises;
-const path = require ('path');
+const fs = require('fs').promises;
+const path = require('path');
+const { NotFoundError, ValidationError } = require('../middlewares/errors');
 
 const rutaClientes = path.join(__dirname, '..', 'data', 'clientes.json');
 
-
-async function leerClientes(){
+async function leerClientes() {
     const clientes = await fs.readFile(rutaClientes, 'utf-8');
     return JSON.parse(clientes);
 }
 
-async function guardarClientes(nuevoCliente){
-    const clienteEnTexto = JSON.stringify(nuevoCliente, null, 2);
-    await fs.writeFile(rutaClientes, clienteEnTexto);
+async function guardarClientes(clientes) {
+    await fs.writeFile(rutaClientes, JSON.stringify(clientes, null, 2));
 }
 
-
-async function crearCliente(nuevoCliente){
- const clientes = await leerClientes();
-
-//  NOMBRE
-if(!nuevoCliente.nombre){
-    const error = new Error('Falta el nombre');
-    error.status = 400;
-    throw error;
-}
-
-// EMAIL
-if(!nuevoCliente.email){
-    const error = new Error('Falta el email');
-    error.status = 400;
-    throw error;
-}
-
-// TELEFONO
-if(typeof nuevoCliente.telefono !== "number"){
-    const error = new Error('Agregue un telefono valido');
-    error.status = 400;
-    throw error;
-}
-
-// DIRECCION
-if(!nuevoCliente.direccion){
-    const error = new Error('Falta la direccion');
-    error.status = 400;
-    throw error;
-}
-
-const maxId= clientes.reduce((max, c)=>{return c.id > max ? c.id : max}, 0);
-nuevoCliente.id = maxId + 1;
-
-clientes.push(nuevoCliente);
-await guardarClientes(clientes);
-return nuevoCliente;
-}
-
-
-
-async function eliminarCliente(id){
+async function crearCliente(nuevoCliente) {
     const clientes = await leerClientes();
-    const clientesActualizados = clientes.filter((c)=> {return c.id !== id});
 
-    if(clientesActualizados.length === clientes.length){
-        const error = new Error ('Cliente no encontrado');
-        error.status = 404;
-        throw error;
-    }
+    if (!nuevoCliente.nombre) throw new ValidationError('Falta el nombre');
+    if (!nuevoCliente.email) throw new ValidationError('Falta el email');
+    if (typeof nuevoCliente.telefono !== 'number') throw new ValidationError('Teléfono inválido');
+    if (!nuevoCliente.direccion) throw new ValidationError('Falta la dirección');
 
-    await guardarClientes(clientesActualizados);
-    return clientesActualizados;
+    const maxId = clientes.reduce((max, c) => (c.id > max ? c.id : max), 0);
+    nuevoCliente.id = maxId + 1;
+
+    clientes.push(nuevoCliente);
+    await guardarClientes(clientes);
+    return nuevoCliente;
 }
 
-module.exports = {
-    leerClientes,
-    crearCliente,
-    eliminarCliente
+async function eliminarCliente(id) {
+    const clientes = await leerClientes();
+    const actualizados = clientes.filter((c) => c.id !== id);
+
+    if (actualizados.length === clientes.length) throw new NotFoundError('Cliente no encontrado');
+
+    await guardarClientes(actualizados);
+    return actualizados;
 }
+
+module.exports = { leerClientes, crearCliente, eliminarCliente };
