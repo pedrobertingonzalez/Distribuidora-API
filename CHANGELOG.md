@@ -9,6 +9,12 @@ ser leído sin tener que releer el código.
 
 ### Paso 1 — Base sólida (Fase 1)
 
+#### [GAP] process.on global — `index.js`
+- `unhandledRejection`: captura promesas rechazadas sin catch. Loguea y sale con código 1.
+- `uncaughtException`: captura errores sincrónicos que escaparon de todos los try/catch.
+- `process.exit(1)` permite que el orquestador (PM2, Railway, Docker) reinicie en estado limpio.
+- Ambos van al final de `index.js`, después del `app.listen`.
+
 #### [GAP] helmet + CORS — `index.js`
 - Se instalaron `helmet` y `cors`.
 - `app.use(helmet())` activa ~14 headers HTTP de seguridad en una línea.

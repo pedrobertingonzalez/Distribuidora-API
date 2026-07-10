@@ -37,3 +37,13 @@ app.listen(process.env.PORT || 3000, () => {
     console.log(`Servidor corriendo en puerto ${process.env.PORT || 3000}`);
 });
 
+process.on('unhandledRejection', (reason) => {
+    console.error('[PROCESO] unhandledRejection:', reason);
+    process.exit(1);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('[PROCESO] uncaughtException:', error);
+    process.exit(1);
+});
+
