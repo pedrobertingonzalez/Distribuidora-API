@@ -9,6 +9,18 @@ ser leído sin tener que releer el código.
 
 ### Paso 1 — Base sólida (Fase 1)
 
+#### [GAP] Separación de config por entorno — `.env.example`
+- Se creó `.env.example` con todas las variables requeridas (`PORT`, `ANTHROPIC_API_KEY`)
+  documentadas con comentarios sobre de dónde obtenerlas.
+- **Decisión de arquitectura**: se descartaron las opciones de `.env.development` /
+  `.env.production` (con carga manual o `dotenv-flow`) porque en producción real
+  Railway y Render inyectan las variables directamente como env vars del proceso —
+  nunca leen un archivo `.env.production` del repo. Subir ese archivo al repo sería
+  un riesgo de seguridad, y fuera del repo pierde sentido. El `.env.example` cumple
+  el objetivo real del gap: documentar qué variables son necesarias para que cualquier
+  persona que clone el repo sepa qué tiene que configurar.
+- `.env` ya estaba en `.gitignore`. No se requirió cambio adicional.
+
 #### [GAP] Validación de input con joi — `middlewares/validate.js` + `schemas/`
 - Se instaló `joi` y se creó `middlewares/validate.js` con una factory `validate(schema)`.
 - La factory retorna un middleware que valida `req.body`, acumula todos los errores
