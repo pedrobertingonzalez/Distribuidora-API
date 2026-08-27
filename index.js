@@ -24,11 +24,11 @@ app.use('/productos', productosRouter);
 const proveedoresRouter = require('./routers/proveedores.router');
 app.use('/proveedores', proveedoresRouter);
 
-const agenteRouter = require('./routers/agente-llama.router');
-app.use('/agente-llama', agenteRouter);
+const agenteRouter = require('./routers/agente.router');
+app.use('/agente', agenteRouter);
 
-const agenteOllamaRouter = require('./routers/agente-llama.router');
-app.use('/llama', agenteOllamaRouter);
+const agenteLlamaRouter = require('./routers/agente-llama.router');
+app.use('/agente-llama', agenteLlamaRouter);
 
 const errorHandler = require('./middlewares/errorHandler');
 app.use(errorHandler);
