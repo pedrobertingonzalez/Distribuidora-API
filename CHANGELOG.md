@@ -129,3 +129,67 @@ ser leído sin tener que releer el código.
 - **Estado transitorio conocido**: `pedidos.services.js` todavía importa
   `leerProductos`/`guardarProducto` con la firma vieja — queda roto hasta el
   próximo commit (migración de pedidos), que es inmediato.
+
+#### [GAP] Migración de pedidos a Mongo — `services/pedidos.services.js`
+- Reemplazado `fs.readFile`/`writeFile` por Mongoose contra `Pedido`. Se
+  eliminó `guardarPedido` (mismo motivo que `guardarProducto`: no aplica a
+  documentos individuales).
+- **Race condition en descuento de stock resuelta**: `crearPedido` usaba
+  *leer stock → chequear en JS → restar → escribir* en pasos separados —
+  dos pedidos concurrentes del mismo producto podían leer el mismo stock
+  antes de que el primero terminara de escribir, y el segundo `write` pisaba
+  al primero (se podía vender más stock del real). Se reemplazó por
+  `Producto.findOneAndUpdate({ _id: producto, stock: { $gte: cantidad } },
+  { $inc: { stock: -cantidad } })`: el chequeo y el descuento pasan a ser una
+  sola operación atómica dentro de Mongo, sin ventana donde otro request se
+  pueda colar. Si no hay stock suficiente, el filtro no matchea y devuelve
+  `null` en vez de dejar stock negativo. `cancelarPedido` usa el mismo `$inc`
+  (en positivo) para devolver stock, atómico por el mismo motivo aunque acá
+  no hay riesgo de vender de más.
+- **Primer uso de `populate()`**: `leerPedidos` y `filtrarPedidos` encadenan
+  `.populate('cliente').populate('producto')` — la API devuelve el pedido con
+  los documentos completos de cliente y producto, no solo sus ObjectId.
+  Resuelve el gap "Relaciones sin populate()" de la tabla.
+- `estado: 'pendiente'` y `fecha` ya no se asignan a mano en el service — el
+  modelo `Pedido` los define con `default` (`enum` con default `'pendiente'`,
+  `fecha: Date.now`). Efecto colateral positivo: `fecha` pasa de ser un
+  string de formato regional (`toLocaleDateString()`, ej. `"13/5/2026"`) a un
+  `Date` real de Mongo, ordenable y filtrable por rango.
+- Cascada del rename a `cliente`/`producto` (ObjectId): actualizado
+  `schemas/pedidos.schema.js` (`Joi.string().hex().length(24)` en vez de
+  `Joi.number()`), `routers/pedidos.router.js` (sin `parseInt` en los `:id`
+  de `PATCH /completar/:id` y `PATCH /:id`), y `services/tools.js` (la tool
+  `registrarPedidoPrueba` del agente de IA pasa sus params `idCliente`/
+  `idProducto` de `type: "number"` a `cliente`/`producto` de `type: "string"`,
+  para matchear lo que `crearPedido` espera ahora).
+
+#### [GAP] Validación en dos capas para clientes y proveedores — `models/cliente.model.js`, `models/proveedor.model.js`
+- **Hallazgo durante la migración** (no estaba en la tabla original de
+  gaps, surgió al revisar el refactor de `clientes.services.js` y
+  `proveedores.services.js`): los modelos de Mongoose solo tenían
+  `required: true` en el campo `nombre`. `email`, `telefono`, `direccion`
+  (Cliente) y `categoria` (Proveedor) no tenían respaldo a nivel de modelo —
+  dependían enteramente de que el middleware `validate(schema)` de Joi los
+  exigiera antes en el router.
+- **Por qué importa**: hoy (se verificó con grep sobre todo el repo) nada
+  llama a `crearCliente`/`crearProveedor` sin pasar antes por su router y su
+  schema Joi — ni el agente de IA (`services/tools.js` no define tools de
+  creación de cliente/proveedor) ni ningún script. Pero es un contrato
+  implícito, no forzado por el lenguaje: el día que se agregue una tool de
+  agente, un script de seed, o cualquier otro caller que llame al service
+  directo, se saltearía toda validación sin que nada lo impida — Mongoose
+  aceptaría un documento con `email` o `telefono` indefinidos.
+- **Fix**: se agregó `required: true` a los 4 campos faltantes (mismo patrón
+  ya usado en `nombre`, no es una feature nueva de Mongoose). Con esto la
+  validación queda en dos capas: Joi en el borde (mensajes de error legibles,
+  rechaza antes de tocar la base) y Mongoose como respaldo (garantiza
+  integridad sin importar quién llame al service). También se descubrió y
+  corrigió, en el mismo repaso, que `schemas/proveedores.schema.js` exigía un
+  campo `direccion` que la entidad Proveedor nunca tuvo (copy-paste de
+  `clientes.schema.js` no ajustado) y no validaba `categoria`, que sí es un
+  campo real — se corrigió el schema Joi para que valide `categoria` en vez
+  de `direccion`.
+- Como consecuencia de la corrección del `telefono` de `Number` a `String`
+  (decidido en el commit de setup), `schemas/clientes.schema.js` y
+  `schemas/proveedores.schema.js` pasan de `Joi.number().integer().positive()`
+  a `Joi.string()` para ese campo, consistente con el tipo real del modelo.

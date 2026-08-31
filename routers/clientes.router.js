@@ -24,8 +24,7 @@ router.post('/', validate(crearClienteSchema), async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
     try {
-        const id = parseInt(req.params.id);
-        const eliminar = await eliminarCliente(id);
+        const eliminar = await eliminarCliente(req.params.id);
         res.status(200).json({ eliminar });
     } catch (error) {
         next(error);

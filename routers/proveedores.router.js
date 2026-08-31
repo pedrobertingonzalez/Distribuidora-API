@@ -24,8 +24,7 @@ router.post('/', validate(crearProveedorSchema), async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
     try {
-        const id = parseInt(req.params.id);
-        const eliminar = await eliminarProveedor(id);
+        const eliminar = await eliminarProveedor(req.params.id);
         res.status(200).json({ eliminar });
     } catch (error) {
         next(error);
