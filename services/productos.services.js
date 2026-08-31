@@ -7,6 +7,13 @@ async function leerProductos() {
     return Producto.find();
 }
 
+async function leerProductosPaginado({ skip, limit } = {}) {
+    let query = Producto.find();
+    if (skip) query = query.skip(skip);
+    if (limit) query = query.limit(limit);
+    return query;
+}
+
 async function crearProducto(nuevoProducto) {
     const { nombre, precio, stock, proveedor } = nuevoProducto;
 
@@ -72,6 +79,7 @@ async function historialIA(mensaje) {
 
 module.exports = {
     leerProductos,
+    leerProductosPaginado,
     crearProducto,
     productosPorProveedor,
     stockBajo,

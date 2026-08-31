@@ -7,6 +7,13 @@ async function leerPedidos() {
     return Pedido.find().populate('cliente').populate('producto');
 }
 
+async function leerPedidosPaginado({ skip, limit } = {}) {
+    let query = Pedido.find().populate('cliente').populate('producto');
+    if (skip) query = query.skip(skip);
+    if (limit) query = query.limit(limit);
+    return query;
+}
+
 async function crearPedido(nuevoPedido) {
     const { cliente, producto, cantidad } = nuevoPedido;
 
@@ -62,4 +69,4 @@ async function filtrarPedidos(estado) {
     return resultado;
 }
 
-module.exports = { leerPedidos, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos };
+module.exports = { leerPedidos, leerPedidosPaginado, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos };

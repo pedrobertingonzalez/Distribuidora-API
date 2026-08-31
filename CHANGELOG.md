@@ -193,3 +193,27 @@ ser leído sin tener que releer el código.
   (decidido en el commit de setup), `schemas/clientes.schema.js` y
   `schemas/proveedores.schema.js` pasan de `Joi.number().integer().positive()`
   a `Joi.string()` para ese campo, consistente con el tipo real del modelo.
+
+#### [GAP] Paginación — `GET /productos`, `GET /pedidos`
+- Se agregó `leerProductosPaginado({ skip, limit })` y
+  `leerPedidosPaginado({ skip, limit })` como funciones **nuevas y separadas**
+  de `leerProductos()`/`leerPedidos()`, que quedan intactas sin parámetros.
+- **Decisión de diseño**: la primera versión metía `skip`/`limit` como
+  parámetros opcionales directamente en `leerProductos()` (la función
+  compartida). Se descartó: `historialIA()` llama a `leerProductos()` para
+  inyectar el inventario completo en el contexto de la IA — si esa función
+  acepta `skip`/`limit`, cualquier cambio futuro ahí (a mano o por un agente)
+  podría pasarle esos parámetros sin darse cuenta de que corta el inventario
+  que la IA necesita ver completo. Separar el nombre (`leerProductosPaginado`)
+  hace el contrato explícito: nadie confundiría esa función con "traeme todo
+  el inventario".
+- Se evaluó también resolver la paginación con `.slice()` en JS después de
+  traer la colección completa — se descartó porque pierde el beneficio real
+  de paginar: seguiría trayendo todos los documentos de Mongo a memoria en
+  cada request. `leerProductosPaginado`/`leerPedidosPaginado` arman la query
+  a nivel de Mongo (`Model.find().skip(skip).limit(limit)`), así que solo se
+  transfieren desde la base los documentos de la página pedida.
+- `skip`/`limit` son opcionales vía query params (`?skip=&limit=`) en ambos
+  routers — sin params, el comportamiento es idéntico al de antes (devuelve
+  todo). Probado manualmente: sin params trae el total, `?limit=1` trae 1,
+  `?skip=1&limit=1` trae el segundo.

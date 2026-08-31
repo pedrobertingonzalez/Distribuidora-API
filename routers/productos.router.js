@@ -2,11 +2,13 @@ const express = require('express');
 const router = express.Router();
 const { validate } = require('../middlewares/validate');
 const { crearProductoSchema } = require('../schemas/productos.schema');
-const { leerProductos, crearProducto, productosPorProveedor, stockBajo, analisisStock, historialIA } = require('../services/productos.services');
+const { leerProductosPaginado, crearProducto, productosPorProveedor, stockBajo, analisisStock, historialIA } = require('../services/productos.services');
 
 router.get('/', async (req, res, next) => {
     try {
-        const productos = await leerProductos();
+        const skip = parseInt(req.query.skip) || undefined;
+        const limit = parseInt(req.query.limit) || undefined;
+        const productos = await leerProductosPaginado({ skip, limit });
         res.status(200).json({ productos });
     } catch (error) {
         next(error);

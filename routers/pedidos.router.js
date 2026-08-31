@@ -2,11 +2,13 @@ const express = require('express');
 const router = express.Router();
 const { validate } = require('../middlewares/validate');
 const { crearPedidoSchema } = require('../schemas/pedidos.schema');
-const { leerPedidos, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos } = require('../services/pedidos.services');
+const { leerPedidosPaginado, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos } = require('../services/pedidos.services');
 
 router.get('/', async (req, res, next) => {
     try {
-        const pedidos = await leerPedidos();
+        const skip = parseInt(req.query.skip) || undefined;
+        const limit = parseInt(req.query.limit) || undefined;
+        const pedidos = await leerPedidosPaginado({ skip, limit });
         res.status(200).json({ pedidos });
     } catch (error) {
         next(error);
