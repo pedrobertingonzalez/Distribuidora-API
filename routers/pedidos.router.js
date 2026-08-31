@@ -34,8 +34,7 @@ router.post('/', validate(crearPedidoSchema), async (req, res, next) => {
 
 router.patch('/completar/:id', async (req, res, next) => {
     try {
-        const id = parseInt(req.params.id);
-        const realizado = await pedidoRealizado(id);
+        const realizado = await pedidoRealizado(req.params.id);
         res.status(200).json({ realizado });
     } catch (error) {
         next(error);
@@ -44,8 +43,7 @@ router.patch('/completar/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
     try {
-        const id = parseInt(req.params.id);
-        const cancelar = await cancelarPedido(id);
+        const cancelar = await cancelarPedido(req.params.id);
         res.status(200).json({ cancelar });
     } catch (error) {
         next(error);

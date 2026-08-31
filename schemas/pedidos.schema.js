@@ -1,8 +1,8 @@
 const Joi = require('joi');
 
 const crearPedidoSchema = Joi.object({
-    idCliente: Joi.number().integer().positive().required(),
-    idProducto: Joi.number().integer().positive().required(),
+    cliente: Joi.string().hex().length(24).required(),
+    producto: Joi.string().hex().length(24).required(),
     cantidad: Joi.number().integer().min(1).required(),
 });
 

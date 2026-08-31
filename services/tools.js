@@ -14,20 +14,20 @@ const tools = [
         input_schema: {
             type: "object",
             properties: {
-                idCliente: {
-                type: "number",
-                description: "id del cliente que realiza el pedido"
+                cliente: {
+                type: "string",
+                description: "ObjectId (24 caracteres hex) del cliente que realiza el pedido"
                 },
-                idProducto: {
-                    type: "number",
-                    description: "id del producto a pedir"
+                producto: {
+                    type: "string",
+                    description: "ObjectId (24 caracteres hex) del producto a pedir"
                 },
                 cantidad: {
                     type: "number",
                     description: "cantidad a pedir"
                 }
             },
-            required: ["idCliente", "idProducto", "cantidad"]
+            required: ["cliente", "producto", "cantidad"]
         }
     },
     {

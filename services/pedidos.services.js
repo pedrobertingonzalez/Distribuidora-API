@@ -1,84 +1,65 @@
-const fs = require('fs').promises;
-const path = require('path');
+const Cliente = require('../models/cliente.model');
+const Producto = require('../models/producto.model');
+const Pedido = require('../models/pedido.model');
 const { NotFoundError, ValidationError } = require('../middlewares/errors');
-const { leerClientes } = require('./clientes.services');
-const { leerProductos, guardarProducto } = require('./productos.services');
-
-const rutaPedidos = path.join(__dirname, '..', 'data', 'pedidos.json');
 
 async function leerPedidos() {
-    const pedidos = await fs.readFile(rutaPedidos, 'utf-8');
-    return JSON.parse(pedidos);
-}
-
-async function guardarPedido(pedidos) {
-    await fs.writeFile(rutaPedidos, JSON.stringify(pedidos, null, 2));
+    return Pedido.find().populate('cliente').populate('producto');
 }
 
 async function crearPedido(nuevoPedido) {
-    const pedidos = await leerPedidos();
-    const clientes = await leerClientes();
-    const productos = await leerProductos();
+    const { cliente, producto, cantidad } = nuevoPedido;
 
-    nuevoPedido.estado = 'pendiente';
-    nuevoPedido.fecha = new Date().toLocaleDateString();
-
-    const cliente = clientes.find((c) => c.id === nuevoPedido.idCliente);
-    if (!cliente) throw new NotFoundError('Cliente no encontrado');
-
-    const producto = productos.find((p) => p.id === nuevoPedido.idProducto);
-    if (!producto) throw new NotFoundError('Producto no encontrado');
-
-    if (typeof nuevoPedido.cantidad !== 'number' || nuevoPedido.cantidad <= 0 || nuevoPedido.cantidad > producto.stock) {
+    if (typeof cantidad !== 'number' || cantidad <= 0) {
         throw new ValidationError('Cantidad inválida o sin stock suficiente');
     }
 
-    producto.stock -= nuevoPedido.cantidad;
-    nuevoPedido.total = nuevoPedido.cantidad * producto.precio;
+    const clienteExiste = await Cliente.findById(cliente);
+    if (!clienteExiste) throw new NotFoundError('Cliente no encontrado');
 
-    const maxId = pedidos.reduce((max, p) => (p.id > max ? p.id : max), 0);
-    nuevoPedido.id = maxId + 1;
+    const productoActualizado = await Producto.findOneAndUpdate(
+        { _id: producto, stock: { $gte: cantidad } },
+        { $inc: { stock: -cantidad } },
+        { new: true }
+    );
 
-    await guardarProducto(productos);
-    pedidos.push(nuevoPedido);
-    await guardarPedido(pedidos);
+    if (!productoActualizado) {
+        const productoExiste = await Producto.findById(producto);
+        if (!productoExiste) throw new NotFoundError('Producto no encontrado');
+        throw new ValidationError('Cantidad inválida o sin stock suficiente');
+    }
 
-    return nuevoPedido;
+    const pedido = await Pedido.create({
+        cliente,
+        producto,
+        cantidad,
+        total: cantidad * productoActualizado.precio,
+    });
+
+    return pedido;
 }
 
 async function cancelarPedido(id) {
-    const pedidos = await leerPedidos();
-    const productos = await leerProductos();
+    const pedido = await Pedido.findById(id);
+    if (!pedido) throw new NotFoundError('Pedido no encontrado');
 
-    const idx = pedidos.findIndex((p) => p.id === id);
-    if (idx === -1) throw new NotFoundError('Pedido no encontrado');
+    await Producto.findByIdAndUpdate(pedido.producto, { $inc: { stock: pedido.cantidad } });
 
-    const producto = productos.find((p) => p.id === pedidos[idx].idProducto);
-    if (!producto) throw new NotFoundError('Producto del pedido no encontrado');
-
-    producto.stock += pedidos[idx].cantidad;
-    pedidos[idx].estado = 'cancelado';
-
-    await guardarPedido(pedidos);
-    await guardarProducto(productos);
-    return pedidos[idx];
+    pedido.estado = 'cancelado';
+    await pedido.save();
+    return pedido;
 }
 
 async function pedidoRealizado(id) {
-    const pedidos = await leerPedidos();
-    const pedido = pedidos.find((p) => p.id === id);
+    const pedido = await Pedido.findByIdAndUpdate(id, { estado: 'completado' }, { new: true });
     if (!pedido) throw new NotFoundError('Pedido no encontrado');
-
-    pedido.estado = 'completado';
-    await guardarPedido(pedidos);
     return pedido;
 }
 
 async function filtrarPedidos(estado) {
-    const pedidos = await leerPedidos();
-    const resultado = pedidos.filter((p) => p.estado === estado);
+    const resultado = await Pedido.find({ estado }).populate('cliente').populate('producto');
     if (resultado.length === 0) throw new NotFoundError('No hay pedidos con ese estado');
     return resultado;
 }
 
-module.exports = { leerPedidos, guardarPedido, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos };
+module.exports = { leerPedidos, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos };
