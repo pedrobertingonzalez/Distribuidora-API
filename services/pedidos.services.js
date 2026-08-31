@@ -21,7 +21,7 @@ async function crearPedido(nuevoPedido) {
         throw new ValidationError('Cantidad inválida o sin stock suficiente');
     }
 
-    const clienteExiste = await Cliente.findById(cliente);
+    const clienteExiste = await Cliente.findOne({ _id: cliente, activo: true });
     if (!clienteExiste) throw new NotFoundError('Cliente no encontrado');
 
     const productoActualizado = await Producto.findOneAndUpdate(

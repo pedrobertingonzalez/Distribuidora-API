@@ -21,7 +21,7 @@ async function crearProducto(nuevoProducto) {
     if (typeof precio !== 'number' || precio < 0) throw new ValidationError('Precio inválido');
     if (typeof stock !== 'number' || stock <= 0) throw new ValidationError('Stock inválido');
 
-    const proveedorExiste = await Proveedor.findById(proveedor);
+    const proveedorExiste = await Proveedor.findOne({ _id: proveedor, activo: true });
     if (!proveedorExiste) throw new NotFoundError('Proveedor no encontrado');
 
     return Producto.create({ nombre, precio, stock, proveedor });

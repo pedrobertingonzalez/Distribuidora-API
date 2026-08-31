@@ -217,3 +217,82 @@ ser leído sin tener que releer el código.
   routers — sin params, el comportamiento es idéntico al de antes (devuelve
   todo). Probado manualmente: sin params trae el total, `?limit=1` trae 1,
   `?skip=1&limit=1` trae el segundo.
+
+#### [GAP] Índices — `models/cliente.model.js`, `models/proveedor.model.js`, `models/pedido.model.js`, `models/producto.model.js`
+- Se agregó `index: true` en los campos que la tabla del documento señala
+  como candidatos ("índice en email, en campos de filtro frecuente de
+  pedidos"): `Cliente.email`, `Proveedor.email` (búsqueda por email),
+  `Pedido.estado` (lo filtra `filtrarPedidos`), `Producto.proveedor` (lo
+  filtra `productosPorProveedor`). Sin índice, cada una de esas queries
+  escanea la colección entera; con índice, Mongo va directo a los documentos
+  que matchean.
+- **Decisión**: no se marcó ninguno como `unique`. El gap pide índice para
+  performance de lectura, no una restricción de unicidad nueva — eso
+  cambiaría el comportamiento actual (hoy nada impide emails duplicados) y
+  es una decisión aparte que no estaba pedida en este gap.
+
+#### [GAP] Referencias huérfanas — `models/cliente.model.js`, `models/proveedor.model.js`, `services/clientes.services.js`, `services/proveedores.services.js`
+- **El problema**: `eliminarCliente`/`eliminarProveedor` hacían un borrado
+  físico (`findByIdAndDelete`). Si un cliente con pedidos existentes se
+  borraba, esos pedidos quedaban con una referencia (`ObjectId`) a un
+  documento que ya no existe — `populate('cliente')` en pedidos viejos
+  empezaría a devolver `null`, perdiendo el dato histórico de quién hizo el
+  pedido. Mismo problema simétrico entre `Proveedor` y `Producto`.
+- **Decisión de arquitectura — soft delete condicional** (tomada sin
+  consulta previa, con autorización explícita del usuario para decidir y
+  documentar el razonamiento en este paso puntual): el documento ya orienta
+  la solución ("soft delete de clientes con pedidos"). Se implementó de
+  forma condicional, no incondicional:
+  - Si el cliente/proveedor **tiene** pedidos/productos asociados
+    (`Pedido.exists({ cliente: id })` / `Producto.exists({ proveedor: id })`),
+    se marca `activo: false` en vez de borrarlo — el documento sigue
+    existiendo, así que `populate()` en pedidos/productos viejos sigue
+    resolviendo el dato real en vez de `null`.
+  - Si **no** tiene nada asociado, se borra físicamente
+    (`findByIdAndDelete`) — no tiene sentido dejar un documento marcado
+    "inactivo" sin ninguna referencia que proteger, sería basura acumulada
+    sin beneficio.
+- Se aplicó el mismo criterio a `Proveedor` (no solo `Cliente`, que es lo
+  único que menciona la tabla del documento): el problema de integridad
+  referencial es idéntico para `Producto.proveedor`, así que la misma
+  solución aplica por simetría. Documentado acá porque es una extensión más
+  allá de lo que pedía literalmente el gap.
+- Se agregó `activo: { type: Boolean, default: true }` a ambos modelos.
+  `leerClientes()`/`leerProveedores()` filtran `{ activo: true }` — un
+  cliente/proveedor "borrado" (soft) deja de aparecer en los listados, igual
+  que si se hubiera borrado de verdad.
+- **Efecto en cascada sobre las validaciones de creación**: `crearProducto`
+  y `crearPedido` verificaban que el proveedor/cliente existiera con
+  `findById` — eso encontraría igual a uno soft-deleted (`activo: false`),
+  permitiendo crear productos o pedidos nuevos contra una entidad que se
+  supone borrada. Se cambió a `findOne({ _id, activo: true })` en los dos
+  services, para que un cliente/proveedor "borrado" no pueda seguir
+  generando actividad nueva.
+- Probado manualmente: cliente sin pedidos se borra físicamente y desaparece
+  de Mongo; cliente con pedidos se marca inactivo, desaparece de
+  `GET /clientes`, pero el `populate('cliente')` de su pedido viejo sigue
+  trayendo el nombre real; un intento de crear un pedido nuevo contra ese
+  cliente inactivo es rechazado con `NotFoundError`.
+
+#### [GAP] Reconexión a Mongo — `config/db.js`
+- El driver de MongoDB ya reintenta la conexión automáticamente por
+  default (no hace falta lógica de retry manual). Lo que faltaba era
+  observabilidad: enterarse cuándo se corta la conexión y cuándo se
+  recupera, en vez de que el proceso quede en silencio.
+- Se agregaron listeners sobre `mongoose.connection`: `disconnected` (loguea
+  advertencia), `reconnected` (loguea recuperación), `error` (loguea el
+  detalle). Complementa el `try/catch` de `conectarDB()` (que cubre el fallo
+  al arrancar) con visibilidad de cortes que ocurran mientras el servidor ya
+  está corriendo.
+
+---
+
+### Paso 2 — Cerrado
+
+Los 6 gaps de Mongo de la tabla quedaron resueltos: race conditions en
+stock (`$inc` atómico), índices, paginación, `populate()`, referencias
+huérfanas (soft delete condicional), reconexión. De paso se corrigieron dos
+bugs preexistentes encontrados durante la migración (validación de
+`proveedores.schema.js` con campo `direccion` inexistente, y falta de
+`required: true` de respaldo en `Cliente`/`Proveedor`). JWT (Paso 3) queda
+para la próxima sesión, según el orden de build sugerido del documento.
