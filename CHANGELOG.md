@@ -62,3 +62,47 @@ ser leído sin tener que releer el código.
   frontend con `cors({ origin: 'https://tu-dominio.com' })`. Hay un comentario
   TODO en `index.js` recordándolo. No se restringió ahora porque el dominio de
   producción aún no está definido.
+
+---
+
+### Paso 2 — Migración a MongoDB
+
+#### [SETUP] Conexión a Mongo + modelos base — `config/db.js`, `models/`
+- No es un gap de la tabla en sí, sino el prerequisito de todos los gaps de
+  Mongo: hasta ahora toda la persistencia era `fs.readFile`/`writeFile` sobre
+  `data/*.json`.
+- **Decisión de arquitectura — Mongo local vs Atlas**: se eligió MongoDB local
+  para esta etapa. Atlas queda para el Paso 7 (deploy), porque Railway/Render
+  corren en contenedores efímeros sin disco persistente confiable — ahí sí va
+  a hacer falta un Mongo gestionado. Desarrollar contra Atlas ahora sumaría
+  latencia de red y dependencia de internet sin necesidad real todavía.
+- **Decisión de arquitectura — `_id` nativo vs `id` numérico**: se eligió usar
+  el `_id` (ObjectId) nativo de Mongo como identificador único, abandonando el
+  campo `id` numérico autoincremental que manejaba cada service a mano
+  (`maxId + 1`). Mongo no tiene autoincremento nativo — simularlo requiere una
+  colección de contadores aparte o buscar el máximo en cada alta, lo cual es
+  un anti-patrón conocido en Mongo y puede generar sus propias condiciones de
+  carrera. Esto implica que las rutas pasan a recibir ObjectId (string
+  hexadecimal de 24 caracteres) en vez de enteros pequeños, y que todo
+  consumidor de `idProveedor`/`idCliente`/`idProducto` (schemas Joi, services,
+  router de productos, `services/tools.js` del agente) se actualiza en los
+  próximos commits para no quedar roto.
+- Se crearon 4 modelos en `models/`: `proveedor.model.js`, `cliente.model.js`,
+  `producto.model.js`, `pedido.model.js`. Las relaciones se modelan con
+  `{ type: mongoose.Schema.Types.ObjectId, ref: 'Coleccion' }` (ej.
+  `Producto.proveedor`, `Pedido.cliente`, `Pedido.producto`), que habilita
+  `.populate()` — se usa por primera vez en la migración de `pedidos.services.js`.
+- **Corrección de tipo**: el campo `telefono` se definió como `String`, no
+  `Number` (el JSON original lo tenía como `Number`). Un teléfono es un dato
+  que se muestra, no sobre el que se calcula — `Number` pierde ceros a la
+  izquierda, no soporta `+` ni guiones, y puede perder precisión en números
+  largos. Aplica igual a `proveedor.model.js` y `cliente.model.js`.
+- **`config/db.js`**: `conectarDB()` tiene try/catch propio, no depende del
+  `unhandledRejection` genérico del Paso 1. Si Mongo no está corriendo, loguea
+  un mensaje específico y accionable ("¿está corriendo mongod?") en vez de un
+  stack trace genérico de Mongoose, y hace `process.exit(1)` desde el propio
+  catch — la app no tiene sentido corriendo sin base de datos, así que el
+  fallo sigue siendo fatal, solo que con mejor diagnóstico.
+- `index.js` ahora llama `await conectarDB()` antes de `app.listen()`.
+- Probado localmente: conecta contra Mongo local (`mongodb://127.0.0.1:27017/distribuidora`)
+  y el servidor levanta normalmente.

@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const conectarDB = require('./config/db');
 const app = express();
 
 app.use(helmet());
@@ -33,9 +34,14 @@ app.use('/agente-llama', agenteLlamaRouter);
 const errorHandler = require('./middlewares/errorHandler');
 app.use(errorHandler);
 
-app.listen(process.env.PORT || 3000, () => {
-    console.log(`Servidor corriendo en puerto ${process.env.PORT || 3000}`);
-});
+async function iniciar() {
+    await conectarDB();
+    app.listen(process.env.PORT || 3000, () => {
+        console.log(`Servidor corriendo en puerto ${process.env.PORT || 3000}`);
+    });
+}
+
+iniciar();
 
 process.on('unhandledRejection', (reason) => {
     console.error('[PROCESO] unhandledRejection:', reason);
