@@ -15,8 +15,7 @@ router.get('/', async (req, res, next) => {
 
 router.get('/proveedor', async (req, res, next) => {
     try {
-        const idProveedor = parseInt(req.query.idProveedor);
-        const productosProveedor = await productosPorProveedor(idProveedor);
+        const productosProveedor = await productosPorProveedor(req.query.proveedor);
         res.status(200).json({ productosProveedor });
     } catch (error) {
         next(error);

@@ -1,49 +1,33 @@
-const fs = require('fs').promises;
-const path = require('path');
+const Producto = require('../models/producto.model');
+const Proveedor = require('../models/proveedor.model');
 const { anthropicClient } = require('./axiosClient');
 const { NotFoundError, ValidationError } = require('../middlewares/errors');
-const { leerProveedores } = require('./proveedores.services');
-
-const rutaProductos = path.join(__dirname, '..', 'data', 'productos.json');
 
 async function leerProductos() {
-    const productos = await fs.readFile(rutaProductos, 'utf-8');
-    return JSON.parse(productos);
-}
-
-async function guardarProducto(productos) {
-    await fs.writeFile(rutaProductos, JSON.stringify(productos, null, 2));
+    return Producto.find();
 }
 
 async function crearProducto(nuevoProducto) {
-    const productos = await leerProductos();
-    const proveedores = await leerProveedores();
+    const { nombre, precio, stock, proveedor } = nuevoProducto;
 
-    if (!nuevoProducto.nombre) throw new ValidationError('Falta el nombre del producto');
-    if (typeof nuevoProducto.precio !== 'number' || nuevoProducto.precio < 0) throw new ValidationError('Precio inválido');
-    if (typeof nuevoProducto.stock !== 'number' || nuevoProducto.stock <= 0) throw new ValidationError('Stock inválido');
+    if (!nombre) throw new ValidationError('Falta el nombre del producto');
+    if (typeof precio !== 'number' || precio < 0) throw new ValidationError('Precio inválido');
+    if (typeof stock !== 'number' || stock <= 0) throw new ValidationError('Stock inválido');
 
-    const proveedor = proveedores.find((p) => p.id === nuevoProducto.idProveedor);
-    if (!proveedor) throw new NotFoundError('Proveedor no encontrado');
+    const proveedorExiste = await Proveedor.findById(proveedor);
+    if (!proveedorExiste) throw new NotFoundError('Proveedor no encontrado');
 
-    const maxId = productos.reduce((max, p) => (p.id > max ? p.id : max), 0);
-    nuevoProducto.id = maxId + 1;
-
-    productos.push(nuevoProducto);
-    await guardarProducto(productos);
-    return nuevoProducto;
+    return Producto.create({ nombre, precio, stock, proveedor });
 }
 
 async function productosPorProveedor(idProveedor) {
-    const productos = await leerProductos();
-    const resultado = productos.filter((p) => p.idProveedor === idProveedor);
+    const resultado = await Producto.find({ proveedor: idProveedor });
     if (resultado.length === 0) throw new NotFoundError('No hay productos para ese proveedor');
     return resultado;
 }
 
 async function stockBajo() {
-    const productos = await leerProductos();
-    const bajos = productos.filter((p) => p.stock < 50);
+    const bajos = await Producto.find({ stock: { $lt: 50 } });
     if (bajos.length === 0) throw new NotFoundError('No hay productos con stock bajo');
     return bajos;
 }
@@ -88,7 +72,6 @@ async function historialIA(mensaje) {
 
 module.exports = {
     leerProductos,
-    guardarProducto,
     crearProducto,
     productosPorProveedor,
     stockBajo,

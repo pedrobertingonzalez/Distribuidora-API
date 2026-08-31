@@ -106,3 +106,26 @@ ser leído sin tener que releer el código.
 - `index.js` ahora llama `await conectarDB()` antes de `app.listen()`.
 - Probado localmente: conecta contra Mongo local (`mongodb://127.0.0.1:27017/distribuidora`)
   y el servidor levanta normalmente.
+
+#### [GAP] Migración de productos a Mongo — `services/productos.services.js`
+- Reemplazado el patrón `fs.readFile`/`writeFile` completo por queries de
+  Mongoose contra el modelo `Producto`. Se eliminó `guardarProducto` (leer
+  array completo → mutar en memoria → reescribir el archivo entero): no tiene
+  equivalente con documentos individuales en Mongo, cada operación ahora
+  escribe directo (`Producto.create()`) o se resuelve puntual en la migración
+  de pedidos (`findOneAndUpdate` + `$inc`, próximo commit).
+- `crearProducto` valida la existencia del proveedor consultando el modelo
+  `Proveedor` directamente (`Proveedor.findById`), no a través de
+  `proveedores.services.js` — ese service todavía no está migrado, y cada
+  service Mongoose puede depender directamente de los modelos de las
+  entidades relacionadas sin pasar por el service ajeno.
+- **Efecto del rename `idProveedor` → `proveedor`** (decisión tomada en el
+  commit de setup, al elegir `_id` nativo con relaciones ObjectId + `ref`):
+  actualizado en cascada `schemas/productos.schema.js` (ahora valida
+  `proveedor` como `Joi.string().hex().length(24)`, formato de un ObjectId,
+  en vez de `Joi.number()`) y `routers/productos.router.js` (`GET
+  /productos/proveedor?proveedor=...`, sin `parseInt` — un ObjectId es un
+  string, no un número).
+- **Estado transitorio conocido**: `pedidos.services.js` todavía importa
+  `leerProductos`/`guardarProducto` con la firma vieja — queda roto hasta el
+  próximo commit (migración de pedidos), que es inmediato.
