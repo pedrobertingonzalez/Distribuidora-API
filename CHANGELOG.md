@@ -354,3 +354,32 @@ para la próxima sesión, según el orden de build sugerido del documento.
 - Pendiente del Paso 3: middleware de verificación con chequeo de
   `tokenVersion`, proteger rutas, roles/permisos, rate limit en `/login`,
   refresh token, decisión localStorage vs cookie httpOnly.
+
+#### [GAP] Middleware de autenticación y rutas protegidas — `middlewares/auth.middleware.js`, `index.js`
+- `middlewares/auth.middleware.js`: `verificarToken`. Verifica el header
+  `Bearer`, la firma y vencimiento del JWT, la existencia del usuario y su
+  `tokenVersion`. Deja `req.usuario = { id, rol }` disponible para las rutas.
+- `index.js`: `verificarToken` montado en `/clientes`, `/pedidos`,
+  `/productos`, `/proveedores`, `/agente` y `/agente-llama`. `/auth` queda
+  sin proteger (si no, nadie podría loguearse).
+- **Decisión — `tokenVersion` contra la base en cada request**: permite
+  revocar los tokens de un usuario (celular robado, cambio de contraseña)
+  sin rotar `JWT_SECRET`, que desloguearía a todos. Costo: una query extra
+  a Mongo por request protegido. Un JWT puro no consulta la base, pero
+  tampoco se puede revocar antes de que venza.
+- **Decisión — rol leído de la base, no del token**: un cambio de rol
+  aplica en el próximo request, sin esperar a que venza el token.
+- **`.select('tokenVersion rol')`**: trae solo los campos necesarios, no el
+  documento entero.
+- **Decisión — mismo 401 para todo** (token roto, vencido, usuario
+  inexistente o versión vieja): no se le revela al atacante qué falló
+  específicamente.
+- **`startsWith('Bearer ')`**: corta headers mal formados con un 401 claro
+  en vez de un error confuso más adelante.
+- **Errores de `jwt.verify`**: `TokenExpiredError` y `JsonWebTokenError` se
+  traducen a 401; cualquier otro error se relanza y termina en 500.
+- **try/catch + `next(error)`**: en Express 4, un error en un middleware
+  async sin atrapar no llega al `errorHandler` y tira el server.
+- Probado manualmente en Thunder Client: sin header 401, token válido 200,
+  token alterado 401, `tokenVersion` subido en Compass → token viejo 401,
+  login nuevo 200, `/auth/login` sin token 200.

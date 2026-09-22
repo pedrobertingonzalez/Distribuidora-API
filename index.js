@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { verificarToken } = require('./middlewares/auth.middleware');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -19,22 +20,22 @@ const authRouter = require('./routers/auth.router');
 app.use('/auth', authRouter);
 
 const clientesRouter = require('./routers/clientes.router');
-app.use('/clientes', clientesRouter);
+app.use('/clientes', verificarToken, clientesRouter);
 
 const pedidosRouter = require('./routers/pedidos.router');
-app.use('/pedidos', pedidosRouter);
+app.use('/pedidos', verificarToken, pedidosRouter);
 
 const productosRouter = require('./routers/productos.router');
-app.use('/productos', productosRouter);
+app.use('/productos', verificarToken, productosRouter);
 
 const proveedoresRouter = require('./routers/proveedores.router');
-app.use('/proveedores', proveedoresRouter);
+app.use('/proveedores', verificarToken, proveedoresRouter);
 
 const agenteRouter = require('./routers/agente.router');
-app.use('/agente', agenteRouter);
+app.use('/agente', verificarToken, agenteRouter);
 
 const agenteLlamaRouter = require('./routers/agente-llama.router');
-app.use('/agente-llama', agenteLlamaRouter);
+app.use('/agente-llama', verificarToken, agenteLlamaRouter);
 
 const errorHandler = require('./middlewares/errorHandler');
 app.use(errorHandler);
