@@ -13,6 +13,11 @@ app.use(express.json());
 const logger = require('./middlewares/logger');
 app.use(logger);
 
+
+
+const authRouter = require('./routers/auth.router');
+app.use('/auth', authRouter);
+
 const clientesRouter = require('./routers/clientes.router');
 app.use('/clientes', clientesRouter);
 

@@ -14,4 +14,20 @@ class ValidationError extends Error {
     }
 }
 
-module.exports = { NotFoundError, ValidationError };
+class ConflictError extends Error {
+    constructor(message = 'Conflicto con un recurso existente') {
+        super(message);
+        this.name = 'ConflictError';
+        this.status = 409;
+    }
+}
+
+class UnauthorizedError extends Error {
+    constructor(message = 'credenciales invalidas') {
+        super(message);
+        this.name = 'UnauthorizedError';
+        this.status = 401;
+    }
+}
+
+module.exports = { NotFoundError, ValidationError, ConflictError, UnauthorizedError };

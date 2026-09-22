@@ -296,3 +296,61 @@ bugs preexistentes encontrados durante la migración (validación de
 `proveedores.schema.js` con campo `direccion` inexistente, y falta de
 `required: true` de respaldo en `Cliente`/`Proveedor`). JWT (Paso 3) queda
 para la próxima sesión, según el orden de build sugerido del documento.
+
+---
+
+### Paso 3 — JWT integrado al capstone
+
+#### [GAP] Register + Login — `models/user.model.js`, `schemas/auth.schema.js`, `routers/auth.router.js`, `services/auth.services.js`
+- Se creó el modelo `User`: `nombre` (trim), `email` (unique, lowercase,
+  trim), `password` (`select: false`), `rol` (enum `admin`/`vendedor`,
+  default `vendedor`), `tokenVersion` (default 0) y `{ timestamps: true }`.
+- `schemas/auth.schema.js`: `registrarSchema` y `loginSchema`, con `password`
+  `min(8).max(72)` (bcrypt ignora lo que pasa de 72 bytes).
+- `middlewares/errors.js`: se agregaron `ConflictError` (409) y
+  `UnauthorizedError` (401).
+- `routers/auth.router.js`: `POST /auth/register` (201) y `POST /auth/login`
+  (200). Router delgado: valida con Joi, llama al service y pasa los errores
+  a `next(error)`. Montado en `index.js` con `app.use('/auth', authRouter)`,
+  sin protección de token (si no, nadie podría loguearse).
+- `services/auth.services.js`: `registrar()` y `login()`.
+- Variables nuevas en `.env` / `.env.example`: `JWT_SECRET`, `JWT_EXPIRES_IN`.
+- **Decisión — mismo 401 "Credenciales inválidas"** para email inexistente y
+  contraseña incorrecta: con mensajes distintos, un atacante con una lista de
+  emails filtrados descubre cuáles tienen cuenta. **Gap conocido**: el
+  register sí revela existencia (409); resolverlo requiere un flujo de
+  verificación por mail, que no existe todavía. Pendiente opcional: timing
+  attack en login (email inexistente responde más rápido que uno que pasa
+  por bcrypt).
+- **Decisión — catch del error 11000 en `registrar()`**: el chequeo previo
+  con `User.exists()` cubre el caso normal, pero no dos registros
+  simultáneos (doble clic): ambos pasan el chequeo antes de que el primero
+  guarde. El índice `unique` frena al segundo con el error 11000 del driver,
+  y el catch lo traduce a 409 en vez de dejarlo llegar como 500. Cualquier
+  otro error se relanza con `throw error;` para no esconder la causa real.
+- **Decisión — `tokenVersion` y `rol` en `User` desde el arranque**: evita
+  migrar documentos más adelante. `tokenVersion` permite invalidar todos los
+  tokens de un usuario (robo, cambio de contraseña) sin rotar `JWT_SECRET`,
+  que desloguearía a todos. `rol` tiene default para que nadie se
+  autoasigne admin; además `stripUnknown` en Joi descarta un `rol` enviado
+  en el body, y el service desestructura solo `{ nombre, email, password }`.
+- **Decisión — bcrypt con 12 rounds** (2^12 = 4096 iteraciones, ~250ms por
+  hash): imperceptible para un usuario, inviable para fuerza bruta sobre una
+  base robada. Los rounds quedan guardados dentro del hash, así que se
+  pueden subir en el futuro sin romper los hashes existentes.
+- **Decisión — normalización idéntica del email** (lowercase + trim) en los
+  dos schemas de Joi y en el modelo: sin ella, un usuario registrado con
+  mayúsculas no encuentra su cuenta al loguearse. El modelo es la última
+  línea de defensa para caminos que no pasan por Joi.
+- **Payload del token**: solo `userId`, `rol` y `tokenVersion`. Nada de
+  email ni password: el payload está firmado, no cifrado.
+- Respuestas sin password: `select: false` solo aplica a queries, así que el
+  documento de `create()` trae el hash en memoria; se devuelve un objeto
+  armado a mano.
+- Probado manualmente en Thunder Client: register 201, register repetido
+  409, login 200 con token, contraseña incorrecta 401, email inexistente 401
+  con el mismo mensaje. Payload verificado (`userId`, `rol`, `tokenVersion`,
+  `iat`, `exp` a 1h).
+- Pendiente del Paso 3: middleware de verificación con chequeo de
+  `tokenVersion`, proteger rutas, roles/permisos, rate limit en `/login`,
+  refresh token, decisión localStorage vs cookie httpOnly.
