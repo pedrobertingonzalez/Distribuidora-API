@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { validate } = require('../middlewares/validate');
+const { requiereRol } = require('../middlewares/roles.middlewares');
 const { crearProductoSchema } = require('../schemas/productos.schema');
 const { leerProductosPaginado, crearProducto, productosPorProveedor, stockBajo, analisisStock, historialIA } = require('../services/productos.services');
 
-router.get('/', async (req, res, next) => {
+router.get('/', requiereRol('admin', 'vendedor'), async (req, res, next) => {
     try {
         const skip = parseInt(req.query.skip) || undefined;
         const limit = parseInt(req.query.limit) || undefined;
@@ -15,7 +16,7 @@ router.get('/', async (req, res, next) => {
     }
 });
 
-router.get('/proveedor', async (req, res, next) => {
+router.get('/proveedor', requiereRol('admin', 'vendedor'), async (req, res, next) => {
     try {
         const productosProveedor = await productosPorProveedor(req.query.proveedor);
         res.status(200).json({ productosProveedor });
@@ -24,7 +25,7 @@ router.get('/proveedor', async (req, res, next) => {
     }
 });
 
-router.get('/stockBajo', async (req, res, next) => {
+router.get('/stockBajo', requiereRol('admin', 'vendedor'), async (req, res, next) => {
     try {
         const stock = await stockBajo();
         res.status(200).json({ stock });
@@ -33,7 +34,7 @@ router.get('/stockBajo', async (req, res, next) => {
     }
 });
 
-router.get('/analisis-stock', async (req, res, next) => {
+router.get('/analisis-stock', requiereRol('admin'), async (req, res, next) => {
     try {
         const stock = await analisisStock();
         res.status(200).json({ stock });
@@ -42,7 +43,7 @@ router.get('/analisis-stock', async (req, res, next) => {
     }
 });
 
-router.post('/', validate(crearProductoSchema), async (req, res, next) => {
+router.post('/', requiereRol('admin'), validate(crearProductoSchema), async (req, res, next) => {
     try {
         const crear = await crearProducto(req.body);
         res.status(201).json({ crear });
@@ -51,7 +52,7 @@ router.post('/', validate(crearProductoSchema), async (req, res, next) => {
     }
 });
 
-router.post('/historialIA', async (req, res, next) => {
+router.post('/historialIA', requiereRol('admin'), async (req, res, next) => {
     try {
         const historial = await historialIA(req.body.mensaje);
         res.status(201).json({ historial });

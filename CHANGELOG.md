@@ -383,3 +383,96 @@ para la próxima sesión, según el orden de build sugerido del documento.
 - Probado manualmente en Thunder Client: sin header 401, token válido 200,
   token alterado 401, `tokenVersion` subido en Compass → token viejo 401,
   login nuevo 200, `/auth/login` sin token 200.
+
+#### [GAP] Roles y permisos (RBAC) — `middlewares/errors.js`, `middlewares/roles.middlewares.js`, todos los routers
+- Con `verificarToken` resolviendo la autenticación ("¿quién sos?"), faltaba la
+  autorización ("¿podés hacer esto?"): todo usuario autenticado tenía acceso
+  total a todos los recursos.
+- `middlewares/errors.js`: se agregó `ForbiddenError` (403), siguiendo el patrón
+  de las clases ya existentes.
+- `middlewares/roles.middlewares.js`: `requiereRol(...roles)`, factory que recibe
+  los roles habilitados y devuelve el middleware que compara contra
+  `req.usuario.rol`. Mismo patrón que `validate(schema)` del Paso 1.
+- Aplicado ruta por ruta en `productos`, `clientes`, `proveedores`, `pedidos`,
+  `agente` y `agente-llama`. `/auth` queda público.
+- **Permisos aplicados**: productos — `GET /`, `/proveedor` y `/stockBajo` para
+  ambos roles; `GET /analisis-stock`, `POST /` y `POST /historialIA` solo admin.
+  Clientes — `GET /` y `POST /` para ambos; `PATCH /:id` (baja) solo admin.
+  Proveedores — todo admin. Pedidos — todas las rutas para ambos roles.
+  Agente y agente-llama — solo admin. Criterio: el admin gestiona la
+  distribuidora (catálogo, proveedores, análisis con IA), el vendedor atiende
+  clientes y carga pedidos. Principio de mínimo privilegio.
+- **Decisión — archivo separado de `auth.middleware.js`**: autenticación y
+  autorización son responsabilidades distintas y conviene que se note en la
+  estructura de archivos.
+- **Decisión — middleware por ruta, no por recurso**: `verificarToken` se monta
+  en `index.js` para el recurso completo porque todas las rutas lo necesitan
+  igual; los roles varían según la operación, así que van en cada ruta.
+- **Decisión — sin consulta a la base**: el rol ya lo leyó `verificarToken` de
+  Mongo en este mismo request. Acá solo se comparan strings en memoria, sin
+  costo adicional, y un cambio de rol sigue aplicando en el request siguiente.
+- **Decisión — deny by default**: se compara contra una lista de permitidos, no
+  de prohibidos. Un rol nuevo queda automáticamente fuera de todas las rutas
+  hasta que se lo sume explícitamente; con la lógica invertida tendría acceso a
+  todo el día que se crea.
+- **Decisión — el permiso se evalúa antes que la validación de Joi**: a quien no
+  tiene permiso no se le devuelven los mensajes del schema, que son información
+  sobre la forma de un endpoint que no puede usar. Orden en la ruta:
+  `verificarToken` → `requiereRol` → `validate` → handler.
+- **Decisión — los permisos se deciden por la operación de negocio, no por el
+  verbo HTTP**: `PATCH /clientes/:id` y `PATCH /proveedores/:id` son los soft
+  deletes del Paso 2, no ediciones. Un PATCH puede ser más destructivo que un
+  DELETE, así que quedan restringidos a admin pese al verbo. En la primera
+  versión de este commit `PATCH /clientes/:id` había quedado habilitado para
+  vendedor por seguir el verbo en vez de la operación; corregido antes de
+  commitear.
+- **Decisión — chequeo defensivo de `req.usuario`**: si el middleware se montara
+  en una ruta fuera de `verificarToken`, sin ese chequeo se produciría un
+  `TypeError` y un 500 confuso. Se responde 403 (fail closed) con un mensaje que
+  identifica el error de programación, distinto del mensaje genérico al usuario.
+- **Decisión — agente y agente-llama restringidos a admin**: las tools
+  disponibles (`obtener productos bajo stock`, `obtener proveedores`,
+  `registrar pedido`) se ejecutan con los permisos del servidor, no con los del
+  usuario que pregunta. Si el vendedor pudiera usar `/agente`, obtendría por esa
+  vía datos que la ruta directa le niega, y `registrarPedidoPrueba` escribiría en
+  la base salteándose el middleware de roles y la validación de Joi. Es el patrón
+  *confused deputy*, agravado por la posibilidad de prompt injection sobre el
+  input en texto libre.
+- **El primer admin se crea a mano**: el register asigna siempre el rol por
+  default (`stripUnknown` descarta un `rol` enviado en el body y el service
+  desestructura solo los campos usados), así que nadie puede autoascenderse. El
+  primer admin se promueve editando el documento en Compass.
+- Probado manualmente en Thunder Client, 9 casos sobre productos: `GET
+  /productos` con vendedor 200, con admin 200, sin token 401;
+  `GET /productos/analisis-stock` con vendedor 403, con admin 200;
+  `POST /productos` con vendedor y body válido 403, con body inválido 403 (no
+  400 — confirma que el permiso se evalúa antes que Joi), con admin y body
+  inválido 400 de Joi, con admin y body válido 201. Más: `GET /proveedores` con
+  vendedor 403, `GET /clientes` con vendedor 200, `PATCH /clientes/:id` con
+  vendedor 403.
+- **Gap conocido — autorización por propiedad (ownership)**: RBAC decide por tipo
+  de recurso, no por instancia. Un vendedor puede ver y modificar pedidos creados
+  por otro vendedor. Requiere un campo `vendedor` en el modelo `Pedido`, llenado
+  desde `req.usuario.id` al crear, y filtrado en el service (el middleware no
+  sirve: corre antes de leer el documento, así que no sabe de quién es). Queda
+  por decidir 403 vs 404 para un recurso ajeno — un 403 confirma que existe,
+  mismo criterio que la enumeración de emails del login.
+- **Gap conocido — filtrado de tools por rol en el agente**: solución correcta a
+  largo plazo en lugar de restringir el endpoint entero — pasar el rol al agente
+  y ofrecerle al modelo únicamente las tools permitidas. Va con el Paso 4, junto
+  con la validación de tool params y las defensas anti prompt-injection.
+- **Gap conocido — faltan PATCH y DELETE de productos**: `productos.services.js`
+  no tiene funciones de actualización ni de borrado. Al escribirlas hay que
+  decidir entre borrado físico y soft delete condicional, como ya se hizo con
+  `Cliente` y `Proveedor`, y agregar un schema de Joi propio para el PATCH
+  (campos opcionales más `.min(1)`, no reutilizar `crearProductoSchema`).
+- **Gap conocido — rutas de baja con nombre engañoso**: `PATCH /clientes/:id` y
+  `PATCH /proveedores/:id` dan de baja, no editan. Deberían ser `PATCH /:id/baja`
+  o `/:id/desactivar`. Consecuencia: hoy no existe forma de editar un cliente o
+  un proveedor, porque la ruta genérica de edición está ocupada por la baja.
+- **Gap conocido — sin constantes de rol**: los roles se pasan como strings
+  literales (`requiereRol('admin')`). Un typo o una mayúscula no produce ningún
+  error: la ruta simplemente bloquea a todos, en silencio. Un objeto
+  `ROLES = { ADMIN: 'admin', VENDEDOR: 'vendedor' }` lo haría detectable.
+- Pendiente del Paso 3: rate limit en `/login`, refresh token, decisión
+  localStorage vs cookie httpOnly.

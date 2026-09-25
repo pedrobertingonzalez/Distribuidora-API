@@ -30,4 +30,12 @@ class UnauthorizedError extends Error {
     }
 }
 
-module.exports = { NotFoundError, ValidationError, ConflictError, UnauthorizedError };
+class ForbiddenError extends Error {
+    constructor(message = 'No tenés permiso para realizar esta acción') {
+        super(message);
+        this.name = 'ForbiddenError';
+        this.status = 403;
+    }
+}
+
+module.exports = { NotFoundError, ValidationError, ConflictError, UnauthorizedError, ForbiddenError };
