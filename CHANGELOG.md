@@ -476,3 +476,11 @@ para la próxima sesión, según el orden de build sugerido del documento.
   `ROLES = { ADMIN: 'admin', VENDEDOR: 'vendedor' }` lo haría detectable.
 - Pendiente del Paso 3: rate limit en `/login`, refresh token, decisión
   localStorage vs cookie httpOnly.
+
+  ### Added
+- Rate limit en `POST /login` (`express-rate-limit`): máximo 5 intentos fallidos cada 15 minutos, contados por combinación IP+email.
+  - **Por qué:** sin esto, un atacante puede automatizar brute force / credential stuffing contra el login. El hash de bcrypt ya lo hace lento, pero no lo bloquea.
+  - **Por qué IP+email y no solo IP:** con solo IP, dos usuarios detrás del mismo NAT/oficina se bloquean entre sí sin culpa. Con IP+email, el contador es por intento contra una cuenta específica desde una IP específica.
+  - **Por qué solo cuenta fallidos (`skipSuccessfulRequests`):** un usuario que se equivoca la contraseña y después entra bien no debería perder cupo por errores de tipeo.
+  - **Gap conocido, no resuelto:** esto no protege contra un atacante que rota IPs (botnet) — cada IP nueva arranca con cupo fresco contra el mismo email. La defensa real para eso es bloqueo a nivel de cuenta, no implementado en este capstone.
+  - **Store:** en memoria del proceso (default del paquete). Suficiente para una sola instancia; en producción con múltiples instancias necesitaría un store compartido (Redis), porque cada instancia tendría su propio contador.
