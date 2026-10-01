@@ -484,3 +484,75 @@ para la próxima sesión, según el orden de build sugerido del documento.
   - **Por qué solo cuenta fallidos (`skipSuccessfulRequests`):** un usuario que se equivoca la contraseña y después entra bien no debería perder cupo por errores de tipeo.
   - **Gap conocido, no resuelto:** esto no protege contra un atacante que rota IPs (botnet) — cada IP nueva arranca con cupo fresco contra el mismo email. La defensa real para eso es bloqueo a nivel de cuenta, no implementado en este capstone.
   - **Store:** en memoria del proceso (default del paquete). Suficiente para una sola instancia; en producción con múltiples instancias necesitaría un store compartido (Redis), porque cada instancia tendría su propio contador.
+
+  ### Documented (decisión de arquitectura, no implementado aún)
+- Estrategia de tokens para cuando exista frontend: access token (JWT corto, 15min-1h) + refresh token (larga duración, guardado server-side para poder revocarlo).
+  - **Por qué dos tokens:** un JWT corto minimiza el daño si se filtra, pero solo no genera UX aceptable (usuario tendría que reloguearse cada 15 min). El refresh token permite renovar el access token sin pedir contraseña de nuevo, hasta que también vence.
+  - **Storage decidido:** refresh token en cookie httpOnly (inmune a robo por XSS, ya que JavaScript no puede leerla). Access token en memoria o también en cookie httpOnly, nunca en localStorage.
+  - **Por qué no localStorage:** cualquier script inyectado por XSS puede leer `localStorage` directamente. Cookie httpOnly no es legible desde JavaScript.
+  - **Trade-off:** cookie httpOnly abre superficie a CSRF (el navegador manda la cookie en requests de cualquier origen). Se mitiga con `SameSite=Strict/Lax` y/o token CSRF anti-forgery.
+  - **Se implementa:** en el Bloque 3, cuando haya frontend real para probar el flujo completo.
+
+---
+
+### Cierre 1/10/2026 — Bugs de pedidos (tickets DIST-101 y DIST-102)
+
+#### [BUG] DIST-101 — Estados de pedido sin validar — `services/pedidos.services.js`
+- **Síntoma reportado:** (depósito) el stock mostraba 110 en vez de 100 tras un
+  único pedido de 10 unidades que se canceló; (ventas) se pudo cancelar un
+  pedido ya completado; (administración) un pedido cancelado aparecía como
+  completado.
+- **Causa:** ni `cancelarPedido` ni `pedidoRealizado` miraban el `estado` del
+  pedido antes de actuar. Cancelar dos veces devolvía el stock dos veces, y
+  `pedidoRealizado` usaba `findByIdAndUpdate`, que pisa el estado sin poder
+  leerlo antes.
+- **Fix:** ambas funciones hacen `findById` → `NotFoundError` si no existe →
+  guard `estado !== 'pendiente'` con `ValidationError` (400) → recién ahí la
+  acción (devolver stock / cambiar estado) → `save()`. Solo un pedido
+  `pendiente` puede cancelarse o completarse; `cancelado` y `completado` son
+  estados finales.
+- **Decisión — el guard va antes de la acción:** en la primera versión el `if`
+  quedaba después de devolver el stock, así que el stock se sumaba igual aunque
+  el guard tirara el error.
+- **Decisión — `findById` + `save()` en vez de `findByIdAndUpdate`:** hay que
+  poder mirar el estado antes de cambiarlo.
+- **Pruebas manuales (Thunder Client):** A — cancelar dos veces el mismo pedido
+  (cantidad 3): antes 13 → 10 al crear → 13 → 16; ahora la segunda
+  cancelación es rechazada. C — `PATCH /pedidos/completar/:id` sobre un pedido
+  cancelado: ahora rechazado. **No probados:** B (cancelar uno completado) y el
+  flujo normal (cancelar/completar uno pendiente).
+- **Gap conocido — check-then-act:** dos cancelaciones simultáneas del mismo
+  pedido pueden pasar el guard las dos antes de que cualquiera guarde. Remedio:
+  un update atómico condicional por estado (`findOneAndUpdate` con
+  `{ _id, estado: 'pendiente' }`), como el de `crearPedido` con el stock. No
+  implementado.
+- **Gap conocido — `:id` de ruta sin validar:** un id con formato inválido
+  (ej. `abc`) probablemente da 500 en vez de 400. No verificado.
+
+#### [BUG] DIST-102 — Stock descontado sin pedido creado — `services/pedidos.services.js` (NO se arregla)
+- **Síntoma reportado:** (depósito) errores al cargar pedidos durante un rato, y
+  después en la estantería sobraban 20 unidades que el sistema no tenía; los
+  pedidos no explicaban esa diferencia.
+- **Causa:** `crearPedido` descuenta el stock (`findOneAndUpdate` atómico) y
+  después crea el pedido (`Pedido.create`): son dos operaciones separadas. Si
+  la segunda falla, queda stock descontado sin pedido. Análogo en
+  `cancelarPedido`: se devuelve el stock y después se guarda el estado; si el
+  `save()` falla, el stock queda devuelto con el pedido aún `pendiente`.
+- **Opciones evaluadas:** (1) transacción de Mongo, que da "todo o nada"
+  garantizado por la base, incluso ante una caída del proceso; (2) compensar a
+  mano con `try/catch` (devolver el stock si falla el `create`), que cubre
+  errores pero no caídas, porque el `catch` nunca corre si el proceso muere;
+  (3) reordenar los pasos, que no elimina el problema, solo cambia cuál de los
+  dos estados incorrectos queda.
+- **Decisión — no se arregla en el capstone, riesgo aceptado:** las
+  transacciones exigen replica set y el Mongo del entorno es local (sin replica
+  set); instalarlo o migrar a Atlas solo para esto no vale el tiempo. Se
+  documenta como riesgo conocido.
+- **Solución prevista al migrar a Atlas (Paso 7):** `session.withTransaction()`
+  en `crearPedido`, pasando `{ session }` a cada operación y
+  `Pedido.create([...], { session })`. Aplicar lo mismo a `cancelarPedido`.
+
+#### [MANTENIMIENTO] Pendiente — `findOneAndUpdate` con `{ new: true }`
+- Mongoose avisa que `{ new: true }` está deprecado; se reemplaza por
+  `returnDocument: 'after'`. Aparece en `crearPedido`. No es parte de los
+  bugs; se cambia en un commit aparte.

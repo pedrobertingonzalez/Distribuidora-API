@@ -37,7 +37,7 @@ async function login({ email, password }) {
     if (!coincide) throw new UnauthorizedError();
 
     const token = jwt.sign(
-        { userId: usuario._id.toString(), rol: usuario.rol, tokenVersion: usuario.tokenVersion },
+        { userId: usuario._id.toString(), tokenVersion: usuario.tokenVersion },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
     );

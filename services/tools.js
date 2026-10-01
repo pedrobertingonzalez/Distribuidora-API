@@ -9,7 +9,7 @@ const tools = [
     }
 },
 {
-        name: "registrarPedidoPrueba",
+        name: "crearPedido",
         description: "crea un pedido para un determinado producto",
         input_schema: {
             type: "object",

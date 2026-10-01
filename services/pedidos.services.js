@@ -1,11 +1,8 @@
+const mongoose = require('mongoose');
 const Cliente = require('../models/cliente.model');
 const Producto = require('../models/producto.model');
 const Pedido = require('../models/pedido.model');
 const { NotFoundError, ValidationError } = require('../middlewares/errors');
-
-async function leerPedidos() {
-    return Pedido.find().populate('cliente').populate('producto');
-}
 
 async function leerPedidosPaginado({ skip, limit } = {}) {
     let query = Pedido.find().populate('cliente').populate('producto');
@@ -21,8 +18,16 @@ async function crearPedido(nuevoPedido) {
         throw new ValidationError('Cantidad inválida o sin stock suficiente');
     }
 
+    if (!mongoose.Types.ObjectId.isValid(cliente)) {
+    throw new ValidationError('ID de cliente inválido');
+    }
+
     const clienteExiste = await Cliente.findOne({ _id: cliente, activo: true });
     if (!clienteExiste) throw new NotFoundError('Cliente no encontrado');
+
+    if (!mongoose.Types.ObjectId.isValid(producto)) {
+    throw new ValidationError('Producto inválido');
+    }
 
     const productoActualizado = await Producto.findOneAndUpdate(
         { _id: producto, stock: { $gte: cantidad } },
@@ -47,10 +52,15 @@ async function crearPedido(nuevoPedido) {
 }
 
 async function cancelarPedido(id) {
+
     const pedido = await Pedido.findById(id);
     if (!pedido) throw new NotFoundError('Pedido no encontrado');
 
+    if(pedido.estado !== 'pendiente') throw new ValidationError('El pedido ya esta cancelado o completado');
+
     await Producto.findByIdAndUpdate(pedido.producto, { $inc: { stock: pedido.cantidad } });
+
+
 
     pedido.estado = 'cancelado';
     await pedido.save();
@@ -58,8 +68,15 @@ async function cancelarPedido(id) {
 }
 
 async function pedidoRealizado(id) {
-    const pedido = await Pedido.findByIdAndUpdate(id, { estado: 'completado' }, { new: true });
+    const pedido = await Pedido.findById(id);
+
     if (!pedido) throw new NotFoundError('Pedido no encontrado');
+
+    if(pedido.estado !== 'pendiente') throw new ValidationError('El pedido se encuentra cancelado o completado');
+
+    pedido.estado = 'completado';
+
+    await pedido.save();
     return pedido;
 }
 
@@ -69,4 +86,4 @@ async function filtrarPedidos(estado) {
     return resultado;
 }
 
-module.exports = { leerPedidos, leerPedidosPaginado, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos };
+module.exports = { leerPedidosPaginado, crearPedido, cancelarPedido, pedidoRealizado, filtrarPedidos };

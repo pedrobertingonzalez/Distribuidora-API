@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { anthropicClient } = require('./axiosClient');
 const { tools } = require('./tools');
 const { stockBajo } = require('./productos.services');

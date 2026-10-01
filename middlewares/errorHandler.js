@@ -1,13 +1,10 @@
-const { ValidationError, NotFoundError } = require('./errors');
-
 const errorHandler = (err, req, res, next) => {
     console.error(`[ERROR] ${err.name || 'Error'}: ${err.message}`);
 
-    if (err instanceof ValidationError || err instanceof NotFoundError) {
-        return res.status(err.status).json({ error: err.message });
-    }
+    const status = err.status || 500;
+    const mensaje = status === 500 ? 'Error interno del servidor' : err.message;
 
-    res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor' });
+    res.status(status).json({ error: mensaje });
 };
 
 module.exports = errorHandler;
