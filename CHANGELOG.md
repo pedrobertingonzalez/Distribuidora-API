@@ -556,3 +556,100 @@ para la próxima sesión, según el orden de build sugerido del documento.
 - Mongoose avisa que `{ new: true }` está deprecado; se reemplaza por
   `returnDocument: 'after'`. Aparece en `crearPedido`. No es parte de los
   bugs; se cambia en un commit aparte.
+
+---
+
+### Cierre 2/10/2026 — `PATCH` y `DELETE` de productos
+
+*Código escrito por Pedro; explicación de bases y revisión de Claude; entrada
+redactada por Claude a pedido de Pedro.*
+
+#### [FEATURE] Modificar y dar de baja productos — `services/productos.services.js`, `schemas/productos.schema.js`, `routers/productos.router.js`, `middlewares/validateId.js`, `models/producto.model.js`
+- **Qué faltaba**: los productos solo se podían leer y crear. No había forma
+  de corregir un precio o un stock, ni de sacar un producto del catálogo.
+- **`PATCH /productos/:id` y no `PUT`**: `PUT` reemplaza el recurso entero
+  (hay que mandar todos los campos); `PATCH` cambia solo lo que se manda. Para
+  productos lo habitual es tocar un campo (un precio, un stock), y obligar a
+  reenviar todo es incómodo y riesgoso: se puede pisar un dato sin querer.
+- **Schema propio del PATCH (`modificarProductoSchema`)**, sin reutilizar
+  `crearProductoSchema`: todos los campos opcionales (reutilizar el de crear
+  habría obligado a mandar todo, un `PUT` disfrazado) y `.min(1)` sobre el
+  objeto. Sin el `.min(1)`, un body `{}` pasaría Joi y el service haría un
+  update sin cambios respondiendo 200 como si hubiera hecho algo; con él se
+  rechaza en el borde con 400. Cada campo conserva sus reglas.
+- **`stock` acepta 0 en el PATCH (`min(0)`) pero no en el POST (`min(1)`)**:
+  al crear tiene sentido exigir al menos una unidad; al modificar, quedarse
+  sin stock es un estado real, y coincide con el `min: 0` del modelo.
+  `integer()` solo exige que sea entero, no limita el signo; el piso lo pone
+  `min(0)`.
+- **Decisión de arquitectura — soft delete incondicional (opción B), no
+  condicional como en Cliente/Proveedor.** `Pedido.producto` es una referencia
+  obligatoria a `Producto`: un borrado físico de un producto ya vendido deja
+  al pedido con un `null` en el `populate()` y se pierde qué se vendió. Se
+  evaluaron tres opciones: (A) siempre físico: simple pero deja huérfanos;
+  (B) siempre soft delete; (C) condicional, como en Cliente y Proveedor.
+  Se eligió **B** por trazabilidad: en un sistema donde un error cuesta caro
+  (y más pensando en fintech), no perder el historial de lo vendido pesa más
+  que ahorrar un documento. Además, C habría exigido el mismo campo `activo`
+  y los mismos filtros en las consultas (algunos productos terminan dados de
+  baja igual), más una consulta extra (`Pedido.exists`) para decidir en cada
+  baja; B paga el mismo costo sin esa decisión.
+  - **Costo de B**: hay que filtrar `activo: true` en todas las consultas de
+    productos; si se olvida un filtro, un producto dado de baja sigue
+    apareciendo. Se agregó `activo: { type: Boolean, default: true }` al
+    modelo y se filtró en `leerProductos`, `leerProductosPaginado`,
+    `productosPorProveedor` y `stockBajo`. `analisisStock` e `historialIA`
+    heredan el filtro porque llaman a `stockBajo()` y `leerProductos()`: el
+    LLM nunca recibe productos dados de baja.
+  - **Productos viejos**: los creados antes de este cambio no tienen el campo
+    `activo` y no aparecen con el filtro. Decisión de Pedro: no migrarlos; los
+    datos de prueba se recrean (productos, pedidos, clientes y proveedores
+    nuevos) al cerrar estos detalles.
+- **`DELETE` y no `PATCH` para la baja**: el verbo describe lo que el cliente
+  quiere (sacar el producto), no cómo se guarda por dentro. Responde `204`
+  sin body. (Las rutas de baja de Cliente y Proveedor siguen usando `PATCH`
+  con nombre engañoso; gap ya anotado.)
+- **Service con `findOne({ _id, activo: true })` + `Object.assign` + `save()`,
+  no `findByIdAndUpdate`**: `findByIdAndUpdate` no corre las validaciones del
+  modelo por defecto (ni el `min: 0` del stock); `save()` sí. Es la segunda
+  red de seguridad después de Joi. Costo: dos operaciones, no una atómica;
+  aceptable para una edición de admin poco frecuente. El descuento de stock
+  en pedidos sigue usando update atómico (`$inc`). Un producto dado de baja se
+  comporta como inexistente: 404 al modificarlo o al borrarlo de nuevo.
+  `Object.assign` es seguro porque `validate` (con `stripUnknown`) ya
+  descartó cualquier campo fuera del schema. Si `datos.proveedor` viene, se
+  verifica que el proveedor exista y esté activo (mismo criterio que
+  `crearProducto`).
+- **Validación del `:id` — middleware aparte (`validateId`)**: `validate.js`
+  solo mira `req.body`; el id viaja en la URL (`req.params`), así que quedaba
+  sin revisar y un `abc` llegaba a Mongoose, que tiraba un `CastError` sin
+  `status` y terminaba en 500. Ahora da 400 ("ID inválido"), con la misma
+  regla que ya se usa para `proveedor` (`hex().length(24)`). Se eligió un
+  middleware chico y separado antes que ampliar `validate.js` para no tocar un
+  archivo que usan todos los POST; generalizar `validate` queda disponible
+  como refactor futuro. Id mal formado = 400; id bien formado que no existe =
+  404 (lo decide el service).
+- **Orden de middlewares en las rutas**: rol → id → body. Sin permiso, 403
+  sin revelar nada más; después el id; al final el body.
+- **Permisos (por operación de negocio, no por verbo HTTP)**: `PATCH` y
+  `DELETE` solo `admin`, igual que el `POST`. Cambiar precios y sacar
+  productos del catálogo tiene impacto directo, y el vendedor hoy solo
+  consulta. No se hicieron permisos por campo (por ejemplo, vendedor que
+  ajusta solo el stock): exigiría rutas separadas o revisar el body según el
+  rol, y no hay necesidad real todavía.
+- **Probado manualmente en Thunder Client** (todo OK): `PATCH` con `{ precio }`
+  cambia solo el precio (200); body `{}` → 400; `:id` = `abc` → 400; stock
+  `-3` → 400 y el stock no cambia; proveedor inexistente → 404 y el producto
+  conserva el suyo; `DELETE` → 204, desaparece de `GET /productos` y el
+  documento sigue en Mongo con `activo: false`; `DELETE` y `PATCH` sobre un
+  producto ya dado de baja → 404. **No probado todavía:** sin token (401) y
+  con rol `vendedor` (403) en las rutas nuevas.
+- **Hueco abierto (detectado al revisar `crearPedido`)**: el descuento de
+  stock usa `findOneAndUpdate({ _id: producto, stock: { $gte: cantidad } })`
+  **sin** `activo: true`, así que hoy se puede crear un pedido contra un
+  producto dado de baja. Es la consecuencia de B y no se resolvió en este
+  paso. Corrección prevista: agregar `activo: true` a ese filtro (y al
+  `findById` de la rama de error), igual que ya se hizo con `Cliente`.
+- **Pendiente relacionado**: reutilizar `validateId` en las rutas con id sin
+  validar (`eliminarCliente`, `eliminarProveedor`, `cancelarPedido`,
+  `pedidoRealizado`, `productosPorProveedor`).

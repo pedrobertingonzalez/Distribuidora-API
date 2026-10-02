@@ -4,11 +4,11 @@ const { anthropicClient } = require('./axiosClient');
 const { NotFoundError } = require('../middlewares/errors');
 
 async function leerProductos() {
-    return Producto.find();
+    return Producto.find({activo: true});
 }
 
 async function leerProductosPaginado({ skip, limit } = {}) {
-    let query = Producto.find();
+    let query = Producto.find({activo: true});
     if (skip) query = query.skip(skip);
     if (limit) query = query.limit(limit);
     return query;
@@ -24,16 +24,38 @@ async function crearProducto(nuevoProducto) {
 }
 
 async function productosPorProveedor(idProveedor) {
-    const resultado = await Producto.find({ proveedor: idProveedor });
+    const resultado = await Producto.find({ proveedor: idProveedor, activo: true });
     if (resultado.length === 0) throw new NotFoundError('No hay productos para ese proveedor');
     return resultado;
 }
 
 async function stockBajo() {
-    const bajos = await Producto.find({ stock: { $lt: 50 } });
+    const bajos = await Producto.find({ stock: { $lt: 50 }, activo: true });
     if (bajos.length === 0) throw new NotFoundError('No hay productos con stock bajo');
     return bajos;
 }
+
+async function modificarProducto(id, datos) {
+    const producto = await Producto.findOne({ _id: id, activo: true });
+    if (!producto) throw new NotFoundError('Producto no encontrado');
+
+    if (datos.proveedor) {
+        const proveedorExiste = await Proveedor.findOne({ _id: datos.proveedor, activo: true });
+        if (!proveedorExiste) throw new NotFoundError('Proveedor no encontrado');
+    }
+
+    Object.assign(producto, datos);
+    return producto.save();
+}
+
+async function eliminarProducto(id) {
+    const producto = await Producto.findOne({ _id: id, activo: true });
+    if (!producto) throw new NotFoundError('Producto no encontrado');
+
+    producto.activo = false;
+    await producto.save();
+}
+
 
 // No uses bloques de código ni backticks, solo JSON puro - CONTROL DE OUTPUT
 async function analisisStock() {
@@ -81,4 +103,6 @@ module.exports = {
     stockBajo,
     analisisStock,
     historialIA,
+    modificarProducto,
+    eliminarProducto
 };

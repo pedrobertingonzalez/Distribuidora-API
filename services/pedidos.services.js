@@ -30,13 +30,13 @@ async function crearPedido(nuevoPedido) {
     }
 
     const productoActualizado = await Producto.findOneAndUpdate(
-        { _id: producto, stock: { $gte: cantidad } },
+        { _id: producto, stock: { $gte: cantidad }, activo: true },
         { $inc: { stock: -cantidad } },
         { new: true }
     );
 
     if (!productoActualizado) {
-        const productoExiste = await Producto.findById(producto);
+        const productoExiste = await Producto.findOne({_id: producto, activo: true});
         if (!productoExiste) throw new NotFoundError('Producto no encontrado');
         throw new ValidationError('Cantidad inválida o sin stock suficiente');
     }

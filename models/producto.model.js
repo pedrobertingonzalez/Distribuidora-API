@@ -5,6 +5,7 @@ const productoSchema = new mongoose.Schema({
     precio: { type: Number, required: true, min: 0 },
     stock: { type: Number, required: true, min: 0 },
     proveedor: { type: mongoose.Schema.Types.ObjectId, ref: 'Proveedor', required: true, index: true },
+    activo: { type: Boolean, default: true },
 });
 
 module.exports = mongoose.model('Producto', productoSchema);
