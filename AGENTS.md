@@ -37,7 +37,8 @@ If a request conflicts with one of them, stop and ask instead of working around 
 
 ## Testing
 - Runner: Node's built-in test runner, `node --test`. No Jest/Mocha for now.
-- There are no tests yet (they arrive in Paso 7). Until then, don't claim
+- There are no tests yet; they arrive with point 2 of the Contieri plan,
+  before the Spanish→English translation. Until then, don't claim
   something is covered by tests.
 - Existing test files (`*.test.js`, anything under `test/`) are read-only for
   you: never edit them to make a run pass. If a test fails, report which one

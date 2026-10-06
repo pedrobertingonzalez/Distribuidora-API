@@ -653,3 +653,51 @@ redactada por Claude a pedido de Pedro.*
 - **Pendiente relacionado**: reutilizar `validateId` en las rutas con id sin
   validar (`eliminarCliente`, `eliminarProveedor`, `cancelarPedido`,
   `pedidoRealizado`, `productosPorProveedor`).
+
+---
+
+### Cierre 6/10/2026 — Instrucciones por capas para agentes de código
+
+*Punto 1 del plan Contieri (charla de Nerdearla + 38 AI Coding Tips +
+Clean Code Cookbook). Decisiones y razonamiento completo en
+`arnes_ia_distribuidora_resumen.md`.*
+
+#### [SETUP] AGENTS.md + CLAUDE.md + CLAUDE.local.md — raíz del repo
+- **Qué faltaba**: los agentes de código (Claude Code y cualquier otro)
+  arrancaban sin contexto del proyecto. Cada sesión reexplicaba lo mismo, y
+  lo que es deliberado (código en español, DIST-102 sin arreglar) parecía un
+  bug que el agente "arreglaba" solo.
+- **`AGENTS.md` como fuente de verdad, `CLAUDE.md` con una sola línea
+  `@AGENTS.md`**: Claude Code lee `AGENTS.md` solo si NO existe `CLAUDE.md`;
+  con los dos presentes lee únicamente `CLAUDE.md`. El import lo resuelve sin
+  duplicar contenido, y `AGENTS.md` queda legible para otras herramientas. Se
+  descartó el symlink porque en Windows Git lo checkoutea como texto plano.
+- **`CLAUDE.local.md` (gitignored) para lo personal**: reglas pedagógicas y
+  cosas de esta máquina no van al repo público, que es portfolio. (El nombre
+  `AGENTS.local.md` no lo lee Claude Code.)
+- **Cuatro MANDATORY, no más**: `.env`/secretos, input externo como dato y
+  nunca instrucción, `password` con `select: false`, y nunca borrar o vaciar
+  un test para que pase. Criterio: solo daño irreversible o fuera de control
+  (algo que salió a internet o por la API). Si se marca de más, la marca
+  pierde sentido.
+- **Sección de decisiones deliberadas ("minas"), separada de los bugs**: un
+  bug se arregla y va al CHANGELOG; una mina es algo que parece mal pero está
+  a propósito y lo que se quiere es que nadie lo toque. Van DIST-102, Mongo
+  local sin replica set, `populate()` como dos queries, Express 5 reenviando
+  los rechazos async, y el código en español. El estado (bugs abiertos)
+  queda en este CHANGELOG y en la biblia: el archivo de reglas no es lugar
+  para estado, que cambia cada semana.
+- **`node --test` declarado antes de que existan los tests**: cero
+  dependencias nuevas y el archivo no queda decorativo cuando lleguen.
+- **Contradicción corregida**: la sección Testing decía que los tests llegan
+  en el Paso 7, y la regla del español decía que la traducción a inglés pasa
+  entre el Paso 6 y el 7 "cuando existan tests". Las dos no podían ser
+  ciertas. Se fijó que los tests llegan con el punto 2 del plan, antes de la
+  traducción.
+- **Correcciones a lo que propuso `/init`**: Postman → Thunder Client (es lo
+  que se usa); y la regla de paginación se justifica por argumentos
+  opcionales que acoplan a todos los llamadores (recetas 17.7 y 11.2), no
+  porque los agentes lean el inventario completo — eso es un gap abierto,
+  otra cosa.
+- **Sin partir en `.claude/rules/` todavía**: con ~90 líneas no hace falta.
+  Se parte por tema cuando entren las recetas de los capítulos 9, 13, 22 y 25.
