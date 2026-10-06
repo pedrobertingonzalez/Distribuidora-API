@@ -1,3 +1,4 @@
 .env
 node_modules
 tokenAdmin.txt
+CLAUDE.local.md
